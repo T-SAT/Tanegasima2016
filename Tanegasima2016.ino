@@ -19,9 +19,9 @@
 #define UNAVAILABLE 0
 #define AVAILABLE 1
 
-#define GAIN_P 6.0 // 比例ｹﾞｲﾝ
-#define GAIN_I 0.005 // 積分ｹﾞｲﾝ
-#define GAIN_D 0.5 //微分ゲイン
+#define GAIN_P 8.0 // 比例ｹﾞｲﾝ
+#define GAIN_I 0.05 // 積分ｹﾞｲﾝ
+#define GAIN_D 0.8 //微分ゲイン
 
 #define DEG2RAD (PI/180.0)
 #define RAD2DEG (180.0/PI)
@@ -85,17 +85,19 @@ void ReceiveGPSData(void)
 void ReceiveGPSDataAve(void)
 {
   static int receiveNum = 0;
+  static float flatAve = 0, flonAve = 0;
 
-  while (ss.available())
-    gps.encode(ss.read());
-  Flat += gps.location.lat();
-  Flon += gps.location.lng();
+  ReceiveGPSData();
+  flatAve += gps.location.lat();
+  flonAve += gps.location.lng();
   receiveNum++;
   if (receiveNum >= GPS_SAMPLING_NUM) {
-    Flat /= receiveNum;
-    Flon /= receiveNum;
+    Flat = flatAve / receiveNum;
+    Flon = flonAve / receiveNum;
     isGPSAvailable = AVAILABLE;
     receiveNum = 0;
+    flatAve = 0;
+    flonAve = 0;
   }
 }
 
@@ -137,8 +139,10 @@ void setup()
 {
   Serial.begin(9600);
   pinMode(A1, OUTPUT);
+  pinMode(A2, OUTPUT);
   pinMode(A4, OUTPUT);
   digitalWrite(A1, HIGH);
+  digitalWrite(A2, HIGH);
   digitalWrite(A4, HIGH);
   gyro.Init(L3GD20_CS, ODR760BW100);
   gyro.SetFrequencyOfHPF(HPF1);
@@ -166,17 +170,27 @@ void loop()
 #endif
 
 #ifdef RUN
+//#define NORMAL_GPS_DATA
+#define AVERAGE_GPS_DATA
+
 void setup() {
   // put your setup code here, to run once:
   float goalAngle, currentAngle;
   float flatAve = 0, flonAve = 0;
   int i;
-  
+
   Serial.begin(9600);
   ss.begin(9600);
-  gyro.Init(L3GD20_CS, ODR95BW12_5);
+  pinMode(A1, OUTPUT);
+  pinMode(A2, OUTPUT);
+  pinMode(A4, OUTPUT);
+  digitalWrite(A1, HIGH);
+  digitalWrite(A2, HIGH);
+  digitalWrite(A4, HIGH);
+  gyro.Init(L3GD20_CS, ODR760BW100);
+  gyro.SetFrequencyOfHPF(HPF1);
   control.SetPIDGain(GAIN_P, GAIN_I, GAIN_D);
-  for(i = 0; i < GPS_SAMPLING_NUM; i++) {
+  for (i = 0; i < GPS_SAMPLING_NUM; i++) {
     gelay(1000);
     flatAve += gps.location.lat();
     flonAve += gps.location.lng();
@@ -193,7 +207,13 @@ void setup() {
   GoalVector.DestFlat = GOAL_FLAT;
   GoalVector.DestFlon = GOAL_FLON;
   GoalAngle = GetToGoalAngle_rad(CurrentVector, GoalVector);
+#ifdef NORMAL_GPS_DATA
+  MsTimer2::set(GPS_SAMPLING_RATE, ReceiveGPSDataAve);
+#endif
+
+#ifdef AVERAGE_GPS_DATA
   MsTimer2::set(GPS_SAMPLING_RATE, ReceiveGPSData);
+#endif
   MsTimer2::start();
 }
 
@@ -208,14 +228,26 @@ void loop() {
   angle_rad += DEG2RAD * gz * dt;
   angle_rad = GetTransitionAngle(angle_rad , -180 * DEG2RAD, 180 * DEG2RAD);
 
+#ifdef NORMAL_GPS_DATA
+  CurrentVector.OriginFlat = CurrentVector.DestFlat;
+  CurrentVector.OriginFlon = CurrentVector.DestFlon;
+  CurrentVector.DestFlat = GoalVector.OriginFlat = gps.location.lat();
+  CurrentVector.DestFlon = GoalVector.OriginFlon = gps.location.lng();
+  GoalAngle = GetToGoalAngle_rad(CurrentVector, GoalVector);
+  angle_rad = 0.0;
+#endif
+
+#ifdef AVERAGE_GPS_DATA
   if ( isGPSAvailable) {
     CurrentVector.OriginFlat = CurrentVector.DestFlat;
     CurrentVector.OriginFlon = CurrentVector.DestFlon;
-    CurrentVector.DestFlat = GoalVector.OriginFlat = gps.location.lat();
-    CurrentVector.DestFlon = GoalVector.OriginFlon = gps.location.lng();
+    CurrentVector.DestFlat = GoalVector.OriginFlat = Flat;
+    CurrentVector.DestFlon = GoalVector.OriginFlon = Flon;
     GoalAngle = GetToGoalAngle_rad(CurrentVector, GoalVector);
     angle_rad = 0.0;
+    isGPSAvailable = UNAVAILABLE;
   }
+#endif
 
   motor.SteerControl(GoalAngle, angle_rad * Ka);
 }
