@@ -1,7 +1,12 @@
 #include <TinyGPS++.h>
 #include <SoftwareSerial.h>
 #include <MsTimer2.h>
-#include "gyro.h"
+#include "L3GD20.h"
+#include "Control.h"
+#include "Motor.h"
+
+#define TEST
+//#define RUN
 
 #define RXPIN 4
 #define TXPIN 5
@@ -10,18 +15,22 @@
 #define GOAL_FLON 0760.0760
 
 #define GPS_SAMPLING_RATE 10000 //[ms]
+#define GPS_SAMPLING_NUM 10
 #define UNAVAILABLE 0
 #define AVAILABLE 1
 
-#define DEG2RAD (PI/180.0)
-#define RAD2DEG (180/PI)
-#define sign(n) ((n > 0) - (n < 0))
-
-#define GAIN_P 5.0 // 比例ｹﾞｲﾝ
-#define GAIN_I 0.0000005 // 積分ｹﾞｲﾝ
+#define GAIN_P 6.0 // 比例ｹﾞｲﾝ
+#define GAIN_I 0.005 // 積分ｹﾞｲﾝ
 #define GAIN_D 0.5 //微分ゲイン
 
+#define DEG2RAD (PI/180.0)
+#define RAD2DEG (180.0/PI)
+#define AngleNormalization(n) {if(n > 180) n =- 360; else if(n < -180) n += 360;}
+#define sign(n) ((n > 0) - (n < 0))
+
 #define Ka 1.0
+
+#define L3GD20_CS A1
 
 TinyGPSPlus gps;
 SoftwareSerial ss(RXPIN, TXPIN);
@@ -34,8 +43,10 @@ typedef struct {
 } VECTOR;
 
 VECTOR CurrentVector, GoalVector;
-int GPSReceiveFlag = UNAVAILABLE;
+int  isGPSAvailable = UNAVAILABLE;
 float GoalAngle;
+float Flat, Flon;
+
 
 float GetTransitionAngle(float FormerAngle, float MinValue, float MaxValue)
 {
@@ -69,7 +80,23 @@ void ReceiveGPSData(void)
 {
   while (ss.available())
     gps.encode(ss.read());
-  GPSReceiveFlag = AVAILABLE;
+}
+
+void ReceiveGPSDataAve(void)
+{
+  static int receiveNum = 0;
+
+  while (ss.available())
+    gps.encode(ss.read());
+  Flat += gps.location.lat();
+  Flon += gps.location.lng();
+  receiveNum++;
+  if (receiveNum >= GPS_SAMPLING_NUM) {
+    Flat /= receiveNum;
+    Flon /= receiveNum;
+    isGPSAvailable = AVAILABLE;
+    receiveNum = 0;
+  }
 }
 
 float getDt(void)
@@ -85,97 +112,87 @@ float getDt(void)
   return ( time );
 }
 
-void MotorControl(const int MotorL, const int MotorR)
-{
-  int motorl, motorr;
-
-  motorl = constrain(MotorL, 0, 255);
-  motorr = constrain(MotorR, 0, 255);
-}
-
 float GetToGoalAngle_rad(VECTOR current, VECTOR goal)
 {
   float currentAngle, goalAngle;
   float angle;
-  
+
   currentAngle = TinyGPSPlus::courseTo(
-    current.DestFlat, current.DestFlon,
-    current.OriginFlat, current.OriginFlon);
+                   current.DestFlat, current.DestFlon,
+                   current.OriginFlat, current.OriginFlon);
   goalAngle = TinyGPSPlus::courseTo(
-    goal.OriginFlat, goal.OriginFlon,
-    goal.DestFlat, goal.DestFlon);
-  currentAngle = GetTransitionAngle(currentAngle, -180, 180);
-  goalAngle = GetTransitionAngle(goalAngle, -180, 180);
+                goal.OriginFlat, goal.OriginFlon,
+                goal.DestFlat, goal.DestFlon);
+  AngleNormalization(currentAngle);
+  AngleNormalization(goalAngle);
+
   angle = currentAngle - goalAngle;
-  angle = -angle;
-  angle = sign(angle)*180 - angle;
-  
-  return(angle * DEG2RAD);
+  angle = -(sign(angle) * 180 - angle);
+
+  return (angle * DEG2RAD);
 }
 
-float PIDctrl(float dCommand, float dVal, float dt)
+#ifdef TEST
+void setup()
 {
-  static float s_dErrIntg = 0;
-  static float s_iErrDet = 0;
-  static float dRet = 0;
-  float dErr, iErr;
-  
-  // 誤差
-  dErr = dCommand - dVal;
-  // 誤差積分
-  s_dErrIntg += dErr * dt;
-  // 誤差微分
-  iErr = dErr - s_iErrDet;
-  //if(iErr < 0)
-  //  iErr = -iErr;  
-  s_iErrDet = dErr;
-  // 制御入力
-  dRet = GAIN_P * dErr + GAIN_I * s_dErrIntg + GAIN_D * iErr;
-
-  //fprintf(stderr, "de:%f\tie:%f\n", dErr, iErr);
-  return (dRet);
+  Serial.begin(9600);
+  pinMode(A1, OUTPUT);
+  pinMode(A4, OUTPUT);
+  digitalWrite(A1, HIGH);
+  digitalWrite(A4, HIGH);
+  gyro.Init(L3GD20_CS, ODR760BW100);
+  gyro.SetFrequencyOfHPF(HPF1);
 }
 
-void SteerControl(float Command_rad, float Current_rad, float dt)
+void loop()
 {
-  float ControlValue;
+  float x, y, z;
+  static float angle = 0.0;
+  float dt;
 
-  ControlValue = PIDctrl(Command_rad, Current_rad, dt);
-  if(ControlValue < 0) {
-    ControlValue = -ControlValue;
-    ControlValue = constrain(ControlValue, 1, 255);
-    //fprintf(stderr, "cr:%f\t", ControlValue);
-    MotorControl(255, 255 - ControlValue); 
-    //MotorControl(255 - ControlValue, 255);
-  }
-  else{
-    ControlValue = constrain(ControlValue, 1, 255);
-    //fprintf(stderr, "cl:%f\t", ControlValue);
-    MotorControl(255 - ControlValue, 255);
-    //MotorControl(255, 255 - ControlValue); 
-  }
+  dt = getDt();
+  gyro.GetPhysicalValue_deg(&x, &y, &z);
+  angle += z * dt;
+  Serial.print(x);
+  Serial.print("\t");
+  Serial.print(y);
+  Serial.print("\t");
+  Serial.print(z);
+  Serial.print("\t");
+  Serial.print(angle);
+  Serial.println();
+  delay(10);
 }
+#endif
 
+#ifdef RUN
 void setup() {
   // put your setup code here, to run once:
+  float goalAngle, currentAngle;
+  float flatAve = 0, flonAve = 0;
+  int i;
+  
   Serial.begin(9600);
   ss.begin(9600);
-  float goalAngle, currentAngle;
-
-  gelay(1000);
-  CurrentVector.OriginFlat = gps.location.lat();
-  CurrentVector.OriginFlon = gps.location.lng();
-  MotorControl(255, 255);
-  delay(5000);
-  MotorControl(0, 0);
+  gyro.Init(L3GD20_CS, ODR95BW12_5);
+  control.SetPIDGain(GAIN_P, GAIN_I, GAIN_D);
+  for(i = 0; i < GPS_SAMPLING_NUM; i++) {
+    gelay(1000);
+    flatAve += gps.location.lat();
+    flonAve += gps.location.lng();
+  }
+  CurrentVector.OriginFlat = flatAve / GPS_SAMPLING_NUM;
+  CurrentVector.OriginFlon = flonAve / GPS_SAMPLING_NUM;
+  motor.Control(255, 255);
+  gelay(5000);
+  motor.Control(0, 0);
   CurrentVector.DestFlat = gps.location.lat();
   CurrentVector.DestFlon = gps.location.lng();
   GoalVector.OriginFlat = gps.location.lat();
   GoalVector.OriginFlon = gps.location.lng();
   GoalVector.DestFlat = GOAL_FLAT;
   GoalVector.DestFlon = GOAL_FLON;
-
-  GoalAngle = GetToGoalAngle_rad(CurrentVector, GoalVector);                
+  GoalAngle = GetToGoalAngle_rad(CurrentVector, GoalVector);
   MsTimer2::set(GPS_SAMPLING_RATE, ReceiveGPSData);
   MsTimer2::start();
 }
@@ -184,19 +201,22 @@ void loop() {
   // put your main code here, to run repeatedly:
   float dt;
   float gx, gy, gz;
-  static float angle = 0.0;
-  
+  static float angle_rad = 0.0;
+
   dt = getDt();
-  measure_gyro(&gx, &gy, &gz);
-  angle += gz * dt;
-  angle = GetTransitionAngle(angle , -180*DEG2RAD, 180*DEG2RAD);
-  if(GPSReceiveFlag == AVAILABLE) {
+  gyro.GetPhysicalValue_deg(&gx, &gy, &gz);
+  angle_rad += DEG2RAD * gz * dt;
+  angle_rad = GetTransitionAngle(angle_rad , -180 * DEG2RAD, 180 * DEG2RAD);
+
+  if ( isGPSAvailable) {
     CurrentVector.OriginFlat = CurrentVector.DestFlat;
     CurrentVector.OriginFlon = CurrentVector.DestFlon;
     CurrentVector.DestFlat = GoalVector.OriginFlat = gps.location.lat();
     CurrentVector.DestFlon = GoalVector.OriginFlon = gps.location.lng();
     GoalAngle = GetToGoalAngle_rad(CurrentVector, GoalVector);
-    angle = 0.0;
+    angle_rad = 0.0;
   }
-  SteerControl(angle * Ka, -GoalAngle, dt);     
+
+  motor.SteerControl(GoalAngle, angle_rad * Ka);
 }
+#endif

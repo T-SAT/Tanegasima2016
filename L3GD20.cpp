@@ -1,41 +1,19 @@
 #include <SPI.h>
-#include "gyro.h"
+#include "L3GD20.h"
 
-int L3GD20_CS;
-//const int SS = 10;      // 必ず 10 番を出力にすること
-//const int MOSI = 11;
-//const int MISO = 12;
-//const int SCK  = 13;
-
-short offsetxGyro, offsetyGyro, offsetzGyro;
-
-const byte L3GD20_WHOAMI = 0x0f;
-const byte L3GD20_CTRL1 = 0x20;
-const byte L3GD20_CTRL2 = 0x21;
-const byte L3GD20_CTRL3 = 0x22;
-const byte L3GD20_CTRL4 = 0x23;
-const byte L3GD20_CTRL5 = 0x24;
-const byte L3GD20_X_L = 0x28;
-const byte L3GD20_X_H = 0x29;
-const byte L3GD20_Y_L = 0x2A;
-const byte L3GD20_Y_H = 0x2B;
-const byte L3GD20_Z_L = 0x2C;
-const byte L3GD20_Z_H = 0x2D;
-
-const byte L3GD20_RW = 0x80;
-const byte L3GD20_MS = 0x40;
-
+L3GD20 gyro;
 
 //////write your code///////
-void L3GD20_write(byte reg, byte val)
+void L3GD20::L3GD20_write(byte reg, byte val)
 {
   digitalWrite(L3GD20_CS, LOW);
   SPI.transfer(reg);
   SPI.transfer(val);
   digitalWrite(L3GD20_CS, HIGH);
+
 }
 
-byte L3GD20_read(byte reg)
+byte L3GD20::L3GD20_read(byte reg)
 {
   byte ret = 0;
 
@@ -43,11 +21,10 @@ byte L3GD20_read(byte reg)
   SPI.transfer(reg | L3GD20_RW);
   ret = SPI.transfer(0);
   digitalWrite(L3GD20_CS, HIGH);
-
   return ret;
 }
 
-void get_gyro(short *x, short *y, short *z)
+void L3GD20::GetRowValue(short *x, short *y, short *z)
 {
   short X, Y, Z;
 
@@ -59,10 +36,11 @@ void get_gyro(short *x, short *y, short *z)
   *z = Z = (Z << 8) | L3GD20_read(L3GD20_Z_L);
 }
 
-void measure_gyro(float *x, float *y, float *z)
+void L3GD20::GetPhysicalValue_deg(float *x, float *y, float *z)
 {
   short x_raw, y_raw, z_raw;
-  get_gyro(&x_raw, &y_raw, &z_raw);
+
+  GetRowValue(&x_raw, &y_raw, &z_raw);
 
   *x = (float)(x_raw - offsetxGyro) * 0.00875; // +-250dps
   //x *= 0.0175;// +-500dps
@@ -72,11 +50,13 @@ void measure_gyro(float *x, float *y, float *z)
 
 }
 
-void init_gyro(int CS1)
+void L3GD20::Init(int CS1, DRBW settingDRBW)
 {
+  digitalWrite(SS, HIGH);
+  pinMode(SS, OUTPUT);
+  SPI.begin();
   pinMode(CS1, OUTPUT);
   digitalWrite(CS1, HIGH);
-
   L3GD20_CS = CS1;
 
   int i;
@@ -94,7 +74,7 @@ void init_gyro(int CS1)
 
   Serial.println(L3GD20_read(L3GD20_WHOAMI), HEX); // should show D4
 
-  L3GD20_write(L3GD20_CTRL1, B00001111);
+  L3GD20_write(L3GD20_CTRL1, B00001111 | (settingDRBW << 4));
   //   |||||||+ X axis enable
   //   ||||||+- Y axis enable
   //   |||||+-- Z axis enable
@@ -104,13 +84,21 @@ void init_gyro(int CS1)
 
   for (i = 0; i < OFFSET_NUM; i++)
   {
-    get_gyro(&tmpx, &tmpy, &tmpz);
+    GetRowValue(&tmpx, &tmpy, &tmpz);
     avrx += tmpx;
     avry += tmpy;
     avrz += tmpz;
   }
+
   offsetxGyro = avrx / OFFSET_NUM;
   offsetyGyro = avry / OFFSET_NUM;
   offsetzGyro = avrz / OFFSET_NUM;
 }
+
+void L3GD20::SetFrequencyOfHPF(byte frequency)
+{
+  L3GD20_write(L3GD20_CTRL5, B00010000);
+  L3GD20_write(L3GD20_CTRL2, frequency);
+}
+
 
