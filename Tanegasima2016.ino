@@ -25,7 +25,7 @@
 
 #define DEG2RAD (PI/180.0)
 #define RAD2DEG (180.0/PI)
-#define AngleNormalization(n) {if(n > 180) n =- 360; else if(n < -180) n += 360;}
+#define AngleNormalization(n) if(n > 180) n -= 360; else if(n < -180) n += 360;
 #define sign(n) ((n > 0) - (n < 0))
 
 #define RFPin 10
@@ -135,8 +135,8 @@ float GetToGoalAngle_rad(VECTOR current, VECTOR goal)
   AngleNormalization(currentAngle);
   AngleNormalization(goalAngle);
 
-  angle = currentAngle - goalAngle;
-  angle = -(sign(angle) * 180 - angle);
+  angle = goalAngle - currentAngle;
+  angle = sign(angle) * 180 - angle;
 
   return (angle * DEG2RAD);
 }
@@ -145,6 +145,7 @@ float GetToGoalAngle_rad(VECTOR current, VECTOR goal)
 void setup()
 {
   Serial.begin(9600);
+/*
   PORTD &= ~(1 << 5);
   pinMode(A1, OUTPUT);
   pinMode(A2, OUTPUT);
@@ -156,18 +157,28 @@ void setup()
   motor.SetControlLimit(1, 255);
   gyro.Init(L3GD20_CS, ODR760BW100);
   gyro.SetFrequencyOfHPF(HPF1);
+*/
 }
 
 void loop()
 {
   float x, y, z;
-  static float angle = 0.0;
+  float angle1, angle2, angle3, angle4;
+  
   float dt;
-
+  float flat0 = 35.515901, flon0 = 134.173071;
+  float flat1 = 35.516046, flon1 = 134.172875;
+  float flat2 = 35.516066, flon2 = 134.173251;
+  float flat3 = 35.515759, flon3 = 134.172881;
+  float flat4 = 35.515757, flon4 = 134.173283;
+  VECTOR current, goal;
+/*  
   motor.Control(100, 100);
   dt = getDt();
   gyro.GetPhysicalValue_deg(&x, &y, &z);
   angle += z * dt;
+*/
+  /*
   Serial.print(x);
   Serial.print("\t");
   Serial.print(y);
@@ -177,6 +188,7 @@ void loop()
   Serial.print(angle);
   Serial.println();
   delay(10);
+  */
 }
 #endif
 

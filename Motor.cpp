@@ -4,6 +4,7 @@ Motor motor;
 
 void Motor::SetPinNum(int motorLF, int motorLB, int motorRF, int motorRB)
 {
+  PORTD &= ~(1 << 5);
   MotorLF = motorLF;
   MotorRF = motorRF;
   MotorLB = motorLB;
@@ -81,13 +82,12 @@ void Motor::SteerControl(float command, float current)
 
   ControlValue = PIDControl(command, current);
   if (ControlValue < 0) {
-    ControlValue = -ControlValue;
-    ControlValue = constrain(ControlValue, 1, 255);
-    Control(255, 255 - ControlValue);
+    ControlValue = constrain(fabs(ControlValue), 1, 127);
+    Control(127 + ControlValue, 127 - ControlValue);
   }
   else {
-    ControlValue = constrain(ControlValue, 1, 255);
-    Control(255 - ControlValue, 255);
+    ControlValue = constrain(ControlValue, 1, 127);
+    Control(127 - ControlValue, 127 + ControlValue);
   }
 }
 
