@@ -28,6 +28,14 @@
 #define AngleNormalization(n) {if(n > 180) n =- 360; else if(n < -180) n += 360;}
 #define sign(n) ((n > 0) - (n < 0))
 
+#define RFPin 10
+#define RBPin 6
+#define LFPin 5
+#define LBPin 9
+
+#define MIN_PWM_VALUE 1
+#define MAX_PWM_VALUE 255
+
 #define Ka 1.0
 
 #define L3GD20_CS A1
@@ -46,7 +54,6 @@ VECTOR CurrentVector, GoalVector;
 int  isGPSAvailable = UNAVAILABLE;
 float GoalAngle;
 float Flat, Flon;
-
 
 float GetTransitionAngle(float FormerAngle, float MinValue, float MaxValue)
 {
@@ -138,12 +145,15 @@ float GetToGoalAngle_rad(VECTOR current, VECTOR goal)
 void setup()
 {
   Serial.begin(9600);
+  PORTD &= ~(1 << 5);
   pinMode(A1, OUTPUT);
   pinMode(A2, OUTPUT);
   pinMode(A4, OUTPUT);
   digitalWrite(A1, HIGH);
   digitalWrite(A2, HIGH);
   digitalWrite(A4, HIGH);
+  motor.SetPinNum(LFPin, LBPin, RFPin, RBPin);
+  motor.SetControlLimit(1, 255);
   gyro.Init(L3GD20_CS, ODR760BW100);
   gyro.SetFrequencyOfHPF(HPF1);
 }
@@ -154,6 +164,7 @@ void loop()
   static float angle = 0.0;
   float dt;
 
+  motor.Control(100, 100);
   dt = getDt();
   gyro.GetPhysicalValue_deg(&x, &y, &z);
   angle += z * dt;
@@ -187,6 +198,10 @@ void setup() {
   digitalWrite(A1, HIGH);
   digitalWrite(A2, HIGH);
   digitalWrite(A4, HIGH);
+
+  motor.SetPinNum(LFPin, LBPin, RFPin, RBPin);
+  motor.SetPIDGain(GAIN_P, GAIN_I, GAIN_D);
+  motor.SetControlLimit(MIN_PWM_VALUE, MAX_PWM_VALUE);
   gyro.Init(L3GD20_CS, ODR760BW100);
   gyro.SetFrequencyOfHPF(HPF1);
   control.SetPIDGain(GAIN_P, GAIN_I, GAIN_D);

@@ -9,6 +9,8 @@
 
 #include "Control.h"
 
+#define sign(n) ((n > 0) - (n < 0))
+
 class Motor : private Control {
   public:
     void SetPinNum(int motorLF, int motorRF, int motorLB, int motorRB);

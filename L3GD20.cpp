@@ -72,6 +72,7 @@ void L3GD20::Init(int CS1, DRBW settingDRBW)
   while (!Serial) {
   }
 
+  Serial.print("Receive ID = ");
   Serial.println(L3GD20_read(L3GD20_WHOAMI), HEX); // should show D4
 
   L3GD20_write(L3GD20_CTRL1, B00001111 | (settingDRBW << 4));
