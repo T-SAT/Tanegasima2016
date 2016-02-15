@@ -82,12 +82,12 @@ void Motor::SteerControl(float command, float current)
 
   ControlValue = PIDControl(command, current);
   if (ControlValue < 0) {
-    ControlValue = constrain(fabs(ControlValue), 1, 127);
-    Control(127 + ControlValue, 127 - ControlValue);
+    ControlValue = constrain(fabs(ControlValue), MinValue, MaxValue / 2);
+    Control((MaxValue / 2) + ControlValue, (MaxValue / 2) - ControlValue);
   }
   else {
-    ControlValue = constrain(ControlValue, 1, 127);
-    Control(127 - ControlValue, 127 + ControlValue);
+    ControlValue = constrain(ControlValue, MinValue, MaxValue / 2);
+    Control((MaxValue / 2) - ControlValue, (MaxValue / 2) + ControlValue);
   }
 }
 
