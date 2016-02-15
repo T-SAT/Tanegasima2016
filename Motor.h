@@ -11,7 +11,7 @@
 
 #define sign(n) ((n > 0) - (n < 0))
 
-class Motor : private Control {
+class Motor : public Control {
   public:
     void SetPinNum(int motorLF, int motorRF, int motorLB, int motorRB);
     void SetControlLimit(int min, int max);

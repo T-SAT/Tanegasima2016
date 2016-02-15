@@ -8,11 +8,14 @@
 #define TEST
 //#define RUN
 
+//#define NORMAL_GPS_DATA
+#define AVERAGE_GPS_DATA
+
 #define RXPIN 4
 #define TXPIN 5
 
-#define GOAL_FLAT 0721.0760
-#define GOAL_FLON 0760.0760
+#define GOAL_FLAT 35.515935
+#define GOAL_FLON 134.173115
 
 #define GPS_SAMPLING_RATE 10000 //[ms]
 #define GPS_SAMPLING_NUM 10
@@ -102,9 +105,9 @@ void ReceiveGPSDataAve(void)
     Flat = flatAve / receiveNum;
     Flon = flonAve / receiveNum;
     isGPSAvailable = AVAILABLE;
-    receiveNum = 0;
-    flatAve = 0;
-    flonAve = 0;
+    receiveNum = 0.0;
+    flatAve = 0.0;
+    flonAve = 0.0;
   }
 }
 
@@ -145,7 +148,7 @@ float GetToGoalAngle_rad(VECTOR current, VECTOR goal)
 void setup()
 {
   Serial.begin(9600);
-/*
+
   PORTD &= ~(1 << 5);
   pinMode(A1, OUTPUT);
   pinMode(A2, OUTPUT);
@@ -156,15 +159,14 @@ void setup()
   motor.SetPinNum(LFPin, LBPin, RFPin, RBPin);
   motor.SetControlLimit(1, 255);
   gyro.Init(L3GD20_CS, ODR760BW100);
-  gyro.SetFrequencyOfHPF(HPF1);
-*/
+  gyro.SetFrequencyOfHPF(HPF10);
 }
 
 void loop()
 {
   float x, y, z;
   float angle1, angle2, angle3, angle4;
-  
+  static float angle = 0;
   float dt;
   float flat0 = 35.515901, flon0 = 134.173071;
   float flat1 = 35.516046, flon1 = 134.172875;
@@ -172,13 +174,12 @@ void loop()
   float flat3 = 35.515759, flon3 = 134.172881;
   float flat4 = 35.515757, flon4 = 134.173283;
   VECTOR current, goal;
-/*  
-  motor.Control(100, 100);
+
+  //motor.Control(100, 100);
   dt = getDt();
   gyro.GetPhysicalValue_deg(&x, &y, &z);
   angle += z * dt;
-*/
-  /*
+
   Serial.print(x);
   Serial.print("\t");
   Serial.print(y);
@@ -188,14 +189,11 @@ void loop()
   Serial.print(angle);
   Serial.println();
   delay(10);
-  */
+
 }
 #endif
 
 #ifdef RUN
-//#define NORMAL_GPS_DATA
-#define AVERAGE_GPS_DATA
-
 void setup() {
   // put your setup code here, to run once:
   float goalAngle, currentAngle;
@@ -260,6 +258,14 @@ void loop() {
   CurrentVector.OriginFlon = CurrentVector.DestFlon;
   CurrentVector.DestFlat = GoalVector.OriginFlat = gps.location.lat();
   CurrentVector.DestFlon = GoalVector.OriginFlon = gps.location.lng();
+  if ((unsigned long)TinyGPSPlus::distanceBetween(
+        GoalVector.OriginFlat, GoalVector.OriginFlon,
+        GoalVector.DestFlat, GoalVector.DestFlon) <= 1.0) {
+    motor.Control(0, 0);
+    while (1) {
+      delay(1000);
+    }
+  }
   GoalAngle = GetToGoalAngle_rad(CurrentVector, GoalVector);
   angle_rad = 0.0;
 #endif
@@ -270,6 +276,14 @@ void loop() {
     CurrentVector.OriginFlon = CurrentVector.DestFlon;
     CurrentVector.DestFlat = GoalVector.OriginFlat = Flat;
     CurrentVector.DestFlon = GoalVector.OriginFlon = Flon;
+    if ((unsigned long)TinyGPSPlus::distanceBetween(
+          GoalVector.OriginFlat, GoalVector.OriginFlon,
+          GoalVector.DestFlat, GoalVector.DestFlon) <= 1.0) {
+      motor.Control(0, 0);
+      while (1) {
+        delay(1000);
+      }
+    }
     GoalAngle = GetToGoalAngle_rad(CurrentVector, GoalVector);
     angle_rad = 0.0;
     isGPSAvailable = UNAVAILABLE;
