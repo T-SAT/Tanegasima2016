@@ -30,11 +30,6 @@ float Control::PIDControl(float dCommand, float dVal)
   float dErr, iErr;
   float dt;
 
-  Serial.print(PGain);
-  Serial.print("\t");
-  Serial.print(IGain);
-  Serial.print("\t");
-  Serial.println(DGain);
   dt = getDt();
   // 誤差
   dErr = dCommand - dVal;

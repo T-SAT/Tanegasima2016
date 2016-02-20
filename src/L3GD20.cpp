@@ -6,6 +6,7 @@ L3GD20 gyro;
 //////write your code///////
 void L3GD20::L3GD20_write(byte reg, byte val)
 {
+  SPI.setDataMode(SPI_MODE3);
   digitalWrite(L3GD20_CS, LOW);
   SPI.transfer(reg);
   SPI.transfer(val);
@@ -17,11 +18,24 @@ byte L3GD20::L3GD20_read(byte reg)
 {
   byte ret = 0;
 
+  SPI.setDataMode(SPI_MODE3);
   digitalWrite(L3GD20_CS, LOW);
   SPI.transfer(reg | L3GD20_RW);
   ret = SPI.transfer(0);
   digitalWrite(L3GD20_CS, HIGH);
   return ret;
+}
+
+void L3GD20::L3GD20_read(byte *data, byte reg, unsigned int regnum)
+{
+  int i;
+
+  SPI.setDataMode(SPI_MODE3);
+  digitalWrite(L3GD20_CS, LOW);
+  SPI.transfer(reg | L3GD20_MS | L3GD20_RW);
+  for (i = 0; i < regnum; i++)
+    data[i] = SPI.transfer(0);
+  digitalWrite(L3GD20_CS, HIGH);
 }
 
 void L3GD20::GetRowValue(short *x, short *y, short *z)
@@ -75,7 +89,7 @@ void L3GD20::Init(int CS1, DRBW settingDRBW)
   Serial.print("Receive ID = ");
   Serial.println(L3GD20_read(L3GD20_WHOAMI), HEX); // should show D4
 
-  L3GD20_write(L3GD20_CTRL1, B00001111 | (settingDRBW << 4));
+  L3GD20_write(L3GD20_CTRL1, B00001111 | (byte)(settingDRBW << 4));
   //   |||||||+ X axis enable
   //   ||||||+- Y axis enable
   //   |||||+-- Z axis enable

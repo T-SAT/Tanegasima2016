@@ -45,13 +45,14 @@ class L3GD20 {
     void GetRowValue(short *x, short *y, short *z);
     void L3GD20_write(byte reg, byte val);
     byte L3GD20_read(byte reg);
+    void L3GD20_read(byte *data, byte reg, unsigned int regnum);
 
   private:
     int L3GD20_CS = SS;
     const int OFFSET_NUM = 1000;
     short offsetxGyro, offsetyGyro, offsetzGyro;
 
-  private:
+  public:
     const byte L3GD20_WHOAMI = 0x0f;
     const byte L3GD20_CTRL1 = 0x20;
     const byte L3GD20_CTRL2 = 0x21;
