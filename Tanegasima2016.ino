@@ -1,5 +1,6 @@
 #include <SPI.h>
 #include <SD.h>
+#include "HC_SR04.h"
 #include "skLPSxxSPI.h"
 #include "L3GD20.h"
 #include "Control.h"
@@ -17,8 +18,7 @@ void setup()
     float angleR, angleG, angleToGoal;
     unsigned long distance;
     float controlValue;
-    float data[10];
-    float pressureOrigin;
+    float data[SENSOR_NUM + 2];
     unsigned long f = millis();
 
     /*>>>>>>>>>>>>>>>>>> シリアル通信の初期化 <<<<<<<<<<<<<<<<<<<*/
@@ -30,6 +30,7 @@ void setup()
     gyro.Init(L3GD20_CSPIN, ODR760BW100);
     gyro.SetFrequencyOfHPF(HPF1);
     lps.PressureInit();
+    sonic.Init(0, 1, 10);
     save.InitSDSlot(SD_CSPIN);
 
     /*>>>>>>>>>>>>>>>>>> モータの初期化 <<<<<<<<<<<<<<<<<<<<*/
@@ -37,15 +38,7 @@ void setup()
     motor.SetControlLimit(MIN_PWM_VALUE, MAX_PWM_VALUE);
 
     lps.PressureRead();
-    RC_LPS[0] = lps.GetPressure();
-    while((millis() - f) < 10000) {
-        lps.PressureRead();
-        pressureOrigin = lps.GetPressure();
-        RC_LPS[1] = 0.99 * RC_LPS[0] + 0.01 * pressureOrigin;
-        pressureOrigin = RC_LPS[1];
-        RC_LPS[0] = RC_LPS[1];
-    }
-    lps.SetOriginPressureValue(pressureOrigin);
+    lps.SetOriginPressureValue(lps.GetPressure());
 
     /*>>>>>>>>>>>>>>>>>> 落下検知 <<<<<<<<<<<<<<<<<<<<*/
     unsigned long startTime = millis();
@@ -56,16 +49,22 @@ void setup()
         GetAllSensorData(data);       
         RC_LPS[1] = 0.9 * RC_LPS[0] + 0.1 * data[LPSxx_H];
         RC_LPS[0] = RC_LPS[1];
+
+        if(CheckCurrentState(RC_LPS[1]) == ST_DOWN && sonic.ReadLength() != 0.0)
+            RC_LPS[1] = (RC_LPS[1] + sonic.ReadLength()) / 2.0;
+
         data[SENSOR_NUM + 0] = RC_LPS[1];
-        data[SENSOR_NUM + 1] = CheckCurrentState(data[LPSxx_H]);
+        data[SENSOR_NUM + 1] = CheckCurrentState(RC_LPS[1]);
+
+        /*------------- ログ記録 ---------------------*/
         wireless.TransferData(data, SENSOR_NUM + 2);
-        save.OnSD("LOG2.csv", data, SENSOR_NUM + 2);
-        if(data[SENSOR_NUM + 0] == ST_LAND)
+        save.OnSD("LOG.csv", data, SENSOR_NUM + 2);
+
+        if(data[SENSOR_NUM + 1] == ST_LAND)
             break;
         if(millis() - startTime >= CUT_PARA_TIME)
             break;
     }
-        
     ReleaseParachute(PARACHUTEPIN, 1000);
 
     /*------------- ログ記録 ---------------------*/
@@ -76,53 +75,37 @@ void setup()
 
     /*>>>>>>>>>>>>>>>>>> 誘導制御（一巡目）<<<<<<<<<<<<<<<<<<<<*/
     gelay(GPS_SAMPLING_RATE);
-    CurrentVector.OriginFlat = gps.location.lat();
-    CurrentVector.OriginFlon = gps.location.lng();
-    
+    OriginFlat = gps.location.lat();
+    OriginFlon = gps.location.lng();
+
     GetAllSensorData(data);
 
-    distance =
-        (unsigned long)TinyGPSPlus::distanceBetween(
-                CurrentVector.OriginFlat, CurrentVector.OriginFlon,
-                GOAL_FLAT, GOAL_FLON);
-
-    data[SENSOR_NUM + 0] = distance;
-    
     /*------------- ログ記録 ---------------------*/
-    wireless.TransferData(data, SENSOR_NUM + 1);
-    save.OnSD("LOG.csv", data, SENSOR_NUM + 1);
+    wireless.TransferData(data, SENSOR_NUM);
+    save.OnSD("LOG.csv", data, SENSOR_NUM);
 
-    if(distance <= GOAL_RANGE) {
-        wireless.println("goal!");
-        Serial.println("goal!");
-        motor.Control(0, 0);
-        while(1);
-    }
-    motor.SetPIDGain(VGAIN_P, VGAIN_I, VGAIN_D);
-    motor.RunStraight(10000);
+    //motor.SetPIDGain(VGAIN_P, AGAIN_I, AGAIN_D);
+    //motor.RunStraight(10000);
+    motor.Control(255, 255);
+    delay(10000);
+    motor.Control(0, 0);
     motor.SetPIDGain(AGAIN_P, AGAIN_I, AGAIN_D);
     gelay(GPS_SAMPLING_RATE);
 
     GetAllSensorData(data);
 
-    CurrentVector.DestFlat = gps.location.lat();
-    CurrentVector.DestFlon = gps.location.lng();
+    DestFlat = gps.location.lat();
+    DestFlon = gps.location.lng();
     angleR = TinyGPSPlus::courseTo(
-            CurrentVector.OriginFlat, CurrentVector.OriginFlon,
-            CurrentVector.DestFlat, CurrentVector.DestFlon);
+            OriginFlat,  OriginFlon,
+            DestFlat,  DestFlon);
     angleG = TinyGPSPlus::courseTo(
-            CurrentVector.DestFlat, CurrentVector.DestFlon,
+            DestFlat,  DestFlon,
             GOAL_FLAT, GOAL_FLON);
     angleToGoal = -DEG2RAD * AngleNormalization(angleR - angleG);
 
-    data[SENSOR_NUM + 0] = angleToGoal;
-
-    /*------------- ログ記録 ---------------------*/
-    wireless.TransferData(data, SENSOR_NUM + 1);
-    save.OnSD("LOG.csv", data, SENSOR_NUM + 1);
-
-    CurrentVector.OriginFlat = CurrentVector.DestFlat;
-    CurrentVector.OriginFlon = CurrentVector.DestFlon;
+    OriginFlat =  DestFlat;
+    OriginFlon =  DestFlon;
     motor.SteerControl(0, angleToGoal);
 }
 
@@ -134,7 +117,7 @@ void loop()
     float angle, angleR, angleG, angleToGoal, distance;
     static float currentAngle = 0;
     float error;
-    float data[20];
+    float data[SENSOR_NUM + 2];
 
     /*>>>>>>>>>>>>>>>>>> 誘導制御開始（n巡目）<<<<<<<<<<<<<<<<<<<<*/
     dt = getDt();
@@ -143,33 +126,40 @@ void loop()
     currentAngle = DEG2RAD * AngleNormalization(currentAngle);
     gelay(GPS_SAMPLING_RATE);
     angle = 0;
-    CurrentVector.DestFlat = gps.location.lat();
-    CurrentVector.DestFlon = gps.location.lng();
+    DestFlat = gps.location.lat();
+    DestFlon = gps.location.lng();
 
     distance =
         (unsigned long)TinyGPSPlus::distanceBetween(
-                CurrentVector.DestFlat, CurrentVector.DestFlon,
+                DestFlat,  DestFlon,
                 GOAL_FLAT, GOAL_FLON);
 
     if(distance <= GOAL_RANGE) {
-        Serial.println("goal!");
+        wireless.println("goal!");
+        save.OnSDStr("LOG.csv", "goal!");
         motor.Control(0, 0);
-        while(1);
+        while(1) {
+            GetAllSensorData(data);
+
+            /*------------- ログ記録 ---------------------*/
+            wireless.TransferData(data, SENSOR_NUM);
+            save.OnSD("LOG.csv", data, SENSOR_NUM);
+        }
     }
 
     angleR = TinyGPSPlus::courseTo(
-            CurrentVector.OriginFlat, CurrentVector.OriginFlon,
-            CurrentVector.DestFlat, CurrentVector.DestFlon);
+            OriginFlat,  OriginFlon,
+            DestFlat,  DestFlon);
 
     angleG = TinyGPSPlus::courseTo(
-            CurrentVector.OriginFlat, CurrentVector.OriginFlon,
+            OriginFlat,  OriginFlon,
             GOAL_FLAT, GOAL_FLON);
 
     angleToGoal = -DEG2RAD * AngleNormalization(angleR - angleG);
     error = angleToGoal - currentAngle;
     motor.SteerControl(0, error);
-    CurrentVector.OriginFlat = CurrentVector.DestFlat;
-    CurrentVector.OriginFlon = CurrentVector.DestFlon;
+    OriginFlat =  DestFlat;
+    OriginFlon =  DestFlon;
 
     GetAllSensorData(data);
     data[SENSOR_NUM + 0] = distance;
@@ -192,6 +182,7 @@ void setup() {
     gyro.Init(L3GD20_CSPIN, ODR760BW100);
     gyro.SetFrequencyOfHPF(HPF1);
     lps.PressureInit();
+    sonic.Init(0, 1, 10);
     save.InitSDSlot(SD_CSPIN);
     motor.SetPinNum(LFPin, LBPin, RFPin, RBPin);
     motor.SetPIDGain(VGAIN_P, VGAIN_I, VGAIN_D);
@@ -213,8 +204,8 @@ void loop() {
     data[3] = gx;
     data[4] = gy;
     data[5] = gz; 
-    data[6] = gps.location.lat();
-    data[7] = gps.location.lng();
+    data[6] = sonic.ReadLength();
+    data[7] = sonic.ReadLength();
     wireless.TransferData(data, 8);
     save.OnSD("panna.csv", data, 8);
 }

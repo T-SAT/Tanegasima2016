@@ -3,7 +3,7 @@
 #include "Save.h"
 
 /*>>>>>>>>>>>>>>>>>>> 各種変数・型定義 <<<<<<<<<<<<<<<<<<*/
-VECTOR CurrentVector;
+float OriginFlat, OriginFlon, DestFlat, DestFlon;
 int isGPSAvailable = UNAVAILABLE;
 
 /*>>>>>>>>>>>>>>>>>>> コンストラクタ <<<<<<<<<<<<<<<<<<*/
@@ -116,15 +116,8 @@ void ReleaseParachute(int parapin, unsigned long heatTime)
 
 void GetAllSensorData(float *data)
 {
-    float gx, gy, gz;
-    float p, t, h;
+    float t, p, h;
 
-    gyro.GetPhysicalValue_deg(&gx, &gy, &gz);
-    data[L3GD20_X] = gx;
-    data[L3GD20_Y] = gy;
-    data[L3GD20_Z] = gz;
-
-    lps.PressureRead();
     t = lps.GetTempreture();
     p = lps.GetPressure();
     h = lps.GetAltitude(p);

@@ -31,10 +31,10 @@
 /*
  * 状態遷移のトリガとなる高度[ms]
  */
-#define UP_ALTITUDE     25
-#define DOWN_ALTITUDE   10
-#define TOP_ALTITUDE    40
-#define LAND_ALTITUDE   1
+#define UP_ALTITUDE     25.0
+#define DOWN_ALTITUDE   10.0
+#define TOP_ALTITUDE    40.0
+#define LAND_ALTITUDE   1.0
 /*
  * パラシュートの切り離しピン 
  */
@@ -42,7 +42,7 @@
 /*
  * パラシュートの強制切り離し時間 [ms]
  */
-#define CUT_PARA_TIME 300000
+#define CUT_PARA_TIME 300000 
 
 /*>>>>>>>>>>>>>>>>>>> 各種センサーピン <<<<<<<<<<<<<<<<<<*/
 #define RXPIN_GPS      4 //GPSモジュールのソフトウェアシリアルrxピン
@@ -91,18 +91,8 @@
 #define sign(n) ((n > 0) - (n < 0))  //数値の符号判定
 
 /*>>>>>>>>>>>>>>>>>>> 各種変数・型定義 <<<<<<<<<<<<<<<<<<*/
-typedef struct {
-    float OriginFlat;
-    float OriginFlon;
-    float DestFlat;
-    float DestFlon;
-} VECTOR;
-
 typedef enum {
-    L3GD20_X = 0,
-    L3GD20_Y,
-    L3GD20_Z,
-    LPSxx_T,
+    LPSxx_T = 0,
     LPSxx_P,
     LPSxx_H,
     GPS_LAT,
@@ -110,7 +100,7 @@ typedef enum {
     SENSOR_NUM,
 } SENSOR_ID;
 
-extern VECTOR CurrentVector;
+extern float OriginFlat, OriginFlon, DestFlat, DestFlon;
 extern int isGPSAvailable;
 
 /*>>>>>>>>>>>>>>>>>>> コンストラクタ <<<<<<<<<<<<<<<<<<*/
