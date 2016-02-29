@@ -1,338 +1,221 @@
-#include <TinyGPS++.h>
-#include <SoftwareSerial.h>
-#include <MsTimer2.h>
+#include <SPI.h>
+#include <SD.h>
+#include "skLPSxxSPI.h"
 #include "L3GD20.h"
 #include "Control.h"
 #include "Motor.h"
-#include "GPS.h"
+#include "Other.h"
+#include "Save.h"
+#include "XBEE.h"
 
-#define TEST
-//#define RUN
+#ifdef RUN
+float PressureOrigin = 0;
+float RC_LPS[2] = {0}; 
 
-#define NORMAL_GPS_DATA
-//#define AVERAGE_GPS_DATA
-
-#define RXPIN 4
-#define TXPIN 3
-
-#define GOAL_FLAT 35.515819
-#define GOAL_FLON 134.171813
-
-#define GPS_SAMPLING_RATE 1000 //[ms]
-#define GPS_SAMPLING_NUM 10
-#define UNAVAILABLE 0
-#define AVAILABLE 1
-
-#define VGAIN_P 0.5 // 比例ｹﾞｲﾝ
-#define VGAIN_I 0.0 // 積分ｹﾞｲﾝ
-#define VGAIN_D 0.0 //微分ゲイン
-
-#define AGAIN_P 12.0
-#define AGAIN_I 0.05
-#define AGAIN_D 0.5
-
-#define DEG2RAD (PI/180.0)
-#define RAD2DEG (180.0/PI)
-#define AngleNormalization(n) if(n > 180) n -= 360; else if(n < -180) n += 360;
-#define sign(n) ((n > 0) - (n < 0))
-
-#define RBPin 6
-#define RFPin 10
-#define LBPin 5
-#define LFPin 9
-
-#define MIN_PWM_VALUE 1
-#define MAX_PWM_VALUE 127
-
-#define L3GD20_CS A2
-
-GPS gpso(RXPIN, TXPIN);
-
-TinyGPSPlus gps;
-SoftwareSerial ss(RXPIN, TXPIN);
-
-typedef struct {
-  float OriginFlat;
-  float OriginFlon;
-  float DestFlat;
-  float DestFlon;
-} VECTOR;
-
-VECTOR CurrentVector, GoalVector;
-int  isGPSAvailable = UNAVAILABLE;
-float GoalAngle;
-float Flat, Flon;
-
-float GetTransitionAngle(float FormerAngle, float MinValue, float MaxValue)
-{
-  float mod;
-  float AfterAngle;
-
-  if (FormerAngle < MinValue) {
-    mod = fmod(FormerAngle, fabs(MinValue));
-    AfterAngle = MaxValue + mod;
-  } else if (FormerAngle > MaxValue) {
-    mod = fmod(FormerAngle, fabs(MaxValue));
-    AfterAngle = MinValue + mod;
-  } else {
-    AfterAngle = FormerAngle;
-  }
-
-  return (AfterAngle);
-}
-
-static void gelay(unsigned long ms)
-{
-  unsigned long start = millis();
-  do {
-    while (ss.available())
-      gps.encode(ss.read());
-  } while (millis() - start < ms);
-}
-
-void ReceiveGPSData(void)
-{
-  while (ss.available())
-    gps.encode(ss.read());
-}
-
-int ReceiveGPSDataNormal(void)
-{
-  static unsigned int ReceiveGPSNum = 0;
-  static unsigned long lastTime = millis();
-  unsigned long nowTime = millis();
-
-  ReceiveGPSNum += ss.available();
-  while (ss.available())
-    gps.encode(ss.read());
-  if (ReceiveGPSNum >= 70) {
-    while (ss.available())
-      ss.read();
-    ReceiveGPSNum = 0;
-    if ((nowTime - lastTime) >= GPS_SAMPLING_RATE) {
-      lastTime = millis();
-      return (AVAILABLE);
-    }
-  }
-  return (UNAVAILABLE);
-}
-
-void ReceiveGPSDataAve(void)
-{
-  static int receiveNum = 0;
-  static float flatAve = 0, flonAve = 0;
-
-  ReceiveGPSData();
-  flatAve += gps.location.lat();
-  flonAve += gps.location.lng();
-  receiveNum++;
-  if (receiveNum >= GPS_SAMPLING_NUM) {
-    Flat = flatAve / receiveNum;
-    Flon = flonAve / receiveNum;
-    isGPSAvailable = AVAILABLE;
-    receiveNum = 0.0;
-    flatAve = 0.0;
-    flonAve = 0.0;
-  }
-}
-
-void RunPeriodicallyMs(int (*f)(void), unsigned long period)
-{
-  static unsigned long lastTime = millis();
-  unsigned long nowTime = millis();
-  unsigned long time = nowTime - lastTime;
-  static int isContinue = 1;
-  if (time >= period || isContinue) {
-    isContinue = f();
-    lastTime = millis();
-  } else
-					return;
-}
-
-float getDt(void)
-{
-  static long lastTime = millis();
-
-  long nowTime = millis();
-  float time = (float)(nowTime - lastTime);
-  time = max(time, 20);  //timeは20[us]以上
-  time /= 1000;  //[usec] => [sec]
-  lastTime = nowTime;
-
-  return ( time );
-}
-
-float GetToGoalAngle_rad(VECTOR current, VECTOR goal)
-{
-  float currentAngle, goalAngle;
-  float angle;
-
-  currentAngle = TinyGPSPlus::courseTo(
-                   current.DestFlat, current.DestFlon,
-                   current.OriginFlat, current.OriginFlon);
-  goalAngle = TinyGPSPlus::courseTo(
-                goal.OriginFlat, goal.OriginFlon,
-                goal.DestFlat, goal.DestFlon);
-  AngleNormalization(currentAngle);
-  AngleNormalization(goalAngle);
-
-  angle = goalAngle - currentAngle;
-  angle = sign(angle) * 180 - angle;
-
-  return (angle * DEG2RAD);
-}
-
-#ifdef TEST
 void setup()
 {
-  Serial.begin(9600);
-  ss.begin(4800);
- 
-  PORTD &= ~(1 << 5);
-  pinMode(A1, OUTPUT);
-  pinMode(A2, OUTPUT);
-  pinMode(A4, OUTPUT);
-  digitalWrite(A1, HIGH);
-  digitalWrite(A2, HIGH);
-  digitalWrite(A4, HIGH);
-  motor.SetPinNum(LFPin, LBPin, RFPin, RBPin);
-  motor.SetPIDGain(VGAIN_P, VGAIN_I, VGAIN_D);
-  motor.SetControlLimit(0, 255);
-  //gyro.Init(L3GD20_CS, ODR760BW100);
-  //gyro.SetFrequencyOfHPF(HPF1);
-  while (ss.available())
-    ss.read();
+    float angleR, angleG, angleToGoal;
+    unsigned long distance;
+    float controlValue;
+    float data[10];
+    float pressureOrigin;
+    unsigned long f = millis();
+
+    /*>>>>>>>>>>>>>>>>>> シリアル通信の初期化 <<<<<<<<<<<<<<<<<<<*/
+    Serial.begin(9600);
+    ss.begin(9600);
+    wireless.begin(9600);
+
+    /*>>>>>>>>>>>>>>>>>> 各種センサの初期化 <<<<<<<<<<<<<<<<<<<<*/
+    gyro.Init(L3GD20_CSPIN, ODR760BW100);
+    gyro.SetFrequencyOfHPF(HPF1);
+    lps.PressureInit();
+    save.InitSDSlot(SD_CSPIN);
+
+    /*>>>>>>>>>>>>>>>>>> モータの初期化 <<<<<<<<<<<<<<<<<<<<*/
+    motor.SetPinNum(LFPin, LBPin, RFPin, RBPin);
+    motor.SetControlLimit(MIN_PWM_VALUE, MAX_PWM_VALUE);
+
+    lps.PressureRead();
+    RC_LPS[0] = lps.GetPressure();
+    while((millis() - f) < 10000) {
+        lps.PressureRead();
+        pressureOrigin = lps.GetPressure();
+        RC_LPS[1] = 0.99 * RC_LPS[0] + 0.01 * pressureOrigin;
+        pressureOrigin = RC_LPS[1];
+        RC_LPS[0] = RC_LPS[1];
+    }
+    lps.SetOriginPressureValue(pressureOrigin);
+
+    /*>>>>>>>>>>>>>>>>>> 落下検知 <<<<<<<<<<<<<<<<<<<<*/
+    unsigned long startTime = millis();
+
+    RC_LPS[0] = 0;
+    RC_LPS[1] = 0;
+    while(1) {
+        GetAllSensorData(data);       
+        RC_LPS[1] = 0.9 * RC_LPS[0] + 0.1 * data[LPSxx_H];
+        RC_LPS[0] = RC_LPS[1];
+        data[SENSOR_NUM + 0] = RC_LPS[1];
+        data[SENSOR_NUM + 1] = CheckCurrentState(data[LPSxx_H]);
+        wireless.TransferData(data, SENSOR_NUM + 2);
+        save.OnSD("LOG2.csv", data, SENSOR_NUM + 2);
+        if(data[SENSOR_NUM + 0] == ST_LAND)
+            break;
+        if(millis() - startTime >= CUT_PARA_TIME)
+            break;
+    }
+        
+    ReleaseParachute(PARACHUTEPIN, 1000);
+
+    /*------------- ログ記録 ---------------------*/
+    wireless.println("fall success!!");
+    save.OnSDStr("LOG.csv", "fall success!!");
+
+    delay(10000); 
+
+    /*>>>>>>>>>>>>>>>>>> 誘導制御（一巡目）<<<<<<<<<<<<<<<<<<<<*/
+    gelay(GPS_SAMPLING_RATE);
+    CurrentVector.OriginFlat = gps.location.lat();
+    CurrentVector.OriginFlon = gps.location.lng();
+    
+    GetAllSensorData(data);
+
+    distance =
+        (unsigned long)TinyGPSPlus::distanceBetween(
+                CurrentVector.OriginFlat, CurrentVector.OriginFlon,
+                GOAL_FLAT, GOAL_FLON);
+
+    data[SENSOR_NUM + 0] = distance;
+    
+    /*------------- ログ記録 ---------------------*/
+    wireless.TransferData(data, SENSOR_NUM + 1);
+    save.OnSD("LOG.csv", data, SENSOR_NUM + 1);
+
+    if(distance <= GOAL_RANGE) {
+        wireless.println("goal!");
+        Serial.println("goal!");
+        motor.Control(0, 0);
+        while(1);
+    }
+    motor.SetPIDGain(VGAIN_P, VGAIN_I, VGAIN_D);
+    motor.RunStraight(10000);
+    motor.SetPIDGain(AGAIN_P, AGAIN_I, AGAIN_D);
+    gelay(GPS_SAMPLING_RATE);
+
+    GetAllSensorData(data);
+
+    CurrentVector.DestFlat = gps.location.lat();
+    CurrentVector.DestFlon = gps.location.lng();
+    angleR = TinyGPSPlus::courseTo(
+            CurrentVector.OriginFlat, CurrentVector.OriginFlon,
+            CurrentVector.DestFlat, CurrentVector.DestFlon);
+    angleG = TinyGPSPlus::courseTo(
+            CurrentVector.DestFlat, CurrentVector.DestFlon,
+            GOAL_FLAT, GOAL_FLON);
+    angleToGoal = -DEG2RAD * AngleNormalization(angleR - angleG);
+
+    data[SENSOR_NUM + 0] = angleToGoal;
+
+    /*------------- ログ記録 ---------------------*/
+    wireless.TransferData(data, SENSOR_NUM + 1);
+    save.OnSD("LOG.csv", data, SENSOR_NUM + 1);
+
+    CurrentVector.OriginFlat = CurrentVector.DestFlat;
+    CurrentVector.OriginFlon = CurrentVector.DestFlon;
+    motor.SteerControl(0, angleToGoal);
 }
 
 void loop()
 {
-  float x, y, z;
-  static float angle = 0;
-  float dt;
+    float gx, gy, gz;
+    float dt;
+    float flat, flon;
+    float angle, angleR, angleG, angleToGoal, distance;
+    static float currentAngle = 0;
+    float error;
+    float data[20];
 
-  motor.Control(255, 255);
-  delay(10000);
-  motor.Control(0, 0);
-  delay(10000);
-  /*Serial.print(x);
-    Serial.print("\t");
-    Serial.print(y);
-    Serial.print("\t");
-    Serial.print(z);
-    Serial.print("\t");
-    Serial.print(angle);
-    Serial.print("\t");
-    Serial.println();
-  */
+    /*>>>>>>>>>>>>>>>>>> 誘導制御開始（n巡目）<<<<<<<<<<<<<<<<<<<<*/
+    dt = getDt();
+    gyro.GetPhysicalValue_deg(&gx, &gy, &gz);
+    currentAngle += gz * dt;
+    currentAngle = DEG2RAD * AngleNormalization(currentAngle);
+    gelay(GPS_SAMPLING_RATE);
+    angle = 0;
+    CurrentVector.DestFlat = gps.location.lat();
+    CurrentVector.DestFlon = gps.location.lng();
 
-  delay(10);
-  /**/
+    distance =
+        (unsigned long)TinyGPSPlus::distanceBetween(
+                CurrentVector.DestFlat, CurrentVector.DestFlon,
+                GOAL_FLAT, GOAL_FLON);
+
+    if(distance <= GOAL_RANGE) {
+        Serial.println("goal!");
+        motor.Control(0, 0);
+        while(1);
+    }
+
+    angleR = TinyGPSPlus::courseTo(
+            CurrentVector.OriginFlat, CurrentVector.OriginFlon,
+            CurrentVector.DestFlat, CurrentVector.DestFlon);
+
+    angleG = TinyGPSPlus::courseTo(
+            CurrentVector.OriginFlat, CurrentVector.OriginFlon,
+            GOAL_FLAT, GOAL_FLON);
+
+    angleToGoal = -DEG2RAD * AngleNormalization(angleR - angleG);
+    error = angleToGoal - currentAngle;
+    motor.SteerControl(0, error);
+    CurrentVector.OriginFlat = CurrentVector.DestFlat;
+    CurrentVector.OriginFlon = CurrentVector.DestFlon;
+
+    GetAllSensorData(data);
+    data[SENSOR_NUM + 0] = distance;
+    data[SENSOR_NUM + 1] = error;
+
+    /*------------- ログ記録 ---------------------*/
+    wireless.TransferData(data, SENSOR_NUM + 2);
+    save.OnSD("LOG.csv", data, SENSOR_NUM + 2);
 }
 #endif
 
-#ifdef RUN
+#ifdef TEST
+float PressureOrigin;
+
 void setup() {
-  // put your setup code here, to run once:
-  float goalAngle, currentAngle;
-  float flatAve = 0, flonAve = 0;
-  int i;
+    Serial.begin(9600);
+    ss.begin(9600);
+    wireless.begin(9600);
 
-  Serial.begin(9600);
-  ss.begin(4800);
-  pinMode(A1, OUTPUT);
-  pinMode(A2, OUTPUT);
-  pinMode(A4, OUTPUT);
-  digitalWrite(A1, HIGH);
-  digitalWrite(A2, HIGH);
-  digitalWrite(A4, HIGH);
-  motor.SetPinNum(LFPin, LBPin, RFPin, RBPin);
-  motor.SetPIDGain(VGAIN_P, VGAIN_I, VGAIN_D);
-  motor.SetControlLimit(MIN_PWM_VALUE, MAX_PWM_VALUE);
-  gyro.Init(L3GD20_CS, ODR760BW100);
-  gyro.SetFrequencyOfHPF(HPF1);
-  do {
-    gelay(1000);
-  } while (gps.location.lat() == 0 && gps.location.lng() == 0);
-
-  for (i = 0; i < GPS_SAMPLING_NUM; i++) {
-    gelay(1000);
-    flatAve += gps.location.lat();
-    flonAve += gps.location.lng();
-  }
-  CurrentVector.OriginFlat = flatAve / GPS_SAMPLING_NUM;
-  CurrentVector.OriginFlon = flonAve / GPS_SAMPLING_NUM;
-  Serial.println("check");
-  motor.RunStraight(10000);
-  motor.SetPIDGain(AGAIN_P, AGAIN_I, AGAIN_D);
-  gelay(1000);
-  CurrentVector.DestFlat = gps.location.lat();
-  CurrentVector.DestFlon = gps.location.lng();
-  GoalVector.OriginFlat = gps.location.lat();
-  GoalVector.OriginFlon = gps.location.lng();
-  GoalVector.DestFlat = GOAL_FLAT;
-  GoalVector.DestFlon = GOAL_FLON;
-  GoalAngle = GetToGoalAngle_rad(CurrentVector, GoalVector);
+    gyro.Init(L3GD20_CSPIN, ODR760BW100);
+    gyro.SetFrequencyOfHPF(HPF1);
+    lps.PressureInit();
+    save.InitSDSlot(SD_CSPIN);
+    motor.SetPinNum(LFPin, LBPin, RFPin, RBPin);
+    motor.SetPIDGain(VGAIN_P, VGAIN_I, VGAIN_D);
+    motor.SetControlLimit(MIN_PWM_VALUE, MAX_PWM_VALUE);
+    lps.PressureRead();
+    PressureOrigin = lps.GetPressure();
+    lps.SetOriginPressureValue(PressureOrigin);
 }
 
 void loop() {
-  // put your main code here, to run repeatedly:
-  float dt;
-  float gx, gy, gz;
-  static float angle_rad = 0.0;
+    float gx, gy, gz;
+    float data[8];
 
-  dt = getDt();
-  gyro.GetPhysicalValue_deg(&gx, &gy, &gz);
-  angle_rad += DEG2RAD * gz * dt;
-  angle_rad = GetTransitionAngle(angle_rad , -180 * DEG2RAD, 180 * DEG2RAD);
-#ifdef NORMAL_GPS_DATA
-  gelay(1000);
-  isGPSAvailable = AVAILABLE;
-  if (isGPSAvailable) {
-    CurrentVector.OriginFlat = CurrentVector.DestFlat;
-    CurrentVector.OriginFlon = CurrentVector.DestFlon;
-    CurrentVector.DestFlat = GoalVector.OriginFlat = gps.location.lat();
-    CurrentVector.DestFlon = GoalVector.OriginFlon = gps.location.lng();
-    if ((unsigned long)TinyGPSPlus::distanceBetween(
-          GoalVector.OriginFlat, GoalVector.OriginFlon,
-          GoalVector.DestFlat, GoalVector.DestFlon) <= 1.0) {
-      motor.Control(0, 0);
-      while (1) {
-        delay(1000);
-      }
-    }
-    GoalAngle = GetToGoalAngle_rad(CurrentVector, GoalVector);
-    angle_rad = 0.0;
-    isGPSAvailable = UNAVAILABLE;
-  }
-#endif
-
-#ifdef AVERAGE_GPS_DATA
-  if ( isGPSAvailable) {
-    CurrentVector.OriginFlat = CurrentVector.DestFlat;
-    CurrentVector.OriginFlon = CurrentVector.DestFlon;
-    CurrentVector.DestFlat = GoalVector.OriginFlat = Flat;
-    CurrentVector.DestFlon = GoalVector.OriginFlon = Flon;
-    if ((unsigned long)TinyGPSPlus::distanceBetween(
-          GoalVector.OriginFlat, GoalVector.OriginFlon,
-          GoalVector.DestFlat, GoalVector.DestFlon) <= 1.0) {
-      motor.Control(0, 0);
-      while (1) {
-        delay(1000);
-      }
-    }
-    GoalAngle = GetToGoalAngle_rad(CurrentVector, GoalVector);
-    angle_rad = 0.0;
-    isGPSAvailable = UNAVAILABLE;
-  }
-#endif
-  motor.SteerControl(GoalAngle, angle_rad);
-  Serial.print("GoalAngle="); 
-  Serial.print("\t");
-  Serial.print(RAD2DEG*GoalAngle);
-  Serial.print("\t");
-  Serial.print(RAD2DEG*angle_rad);
-  Serial.print("\t");
-  Serial.println(gz);
-  
+    lps.PressureRead();
+    data[0] = lps.GetPressure();
+    data[1] = lps.GetTempreture();
+    data[2] = lps.GetAltitude(data[0]);
+    gyro.GetPhysicalValue_deg(&gx, &gy, &gz);
+    data[3] = gx;
+    data[4] = gy;
+    data[5] = gz; 
+    data[6] = gps.location.lat();
+    data[7] = gps.location.lng();
+    wireless.TransferData(data, 8);
+    save.OnSD("panna.csv", data, 8);
 }
 #endif
