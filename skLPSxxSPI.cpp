@@ -18,6 +18,7 @@
  *******************************************************************************/
 #include <SPI.h>
 #include "skLPSxxSPI.h"
+#include "Other.h"
 /*******************************************************************************
   skLPSxxx(id,cspin)
   この関数ライブラリを生成する時の初期化処理(コンストラクタ)
@@ -57,8 +58,8 @@ int skLPSxxx::PressureInit()
 
     // デバイスの識別ＩＤをチェックする処理
     PressureReceive(WHO_AM_I_ADRS, &data[0], 1) ;
-    Serial.print("skLPSxx ID(expected 0xBB or 0xBD): ");
-    Serial.println(data[0], HEX);
+//    Serial.print("skLPSxx ID(expected 0xBB or 0xBD): ");
+//    Serial.println(data[0], HEX);
     // WHO_AM_Iの内容をチェック
     if (data[0] == Who_Am_I_ID) 
         ans = 0 ;  // ＩＤは一致した

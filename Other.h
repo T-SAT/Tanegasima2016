@@ -33,7 +33,7 @@
  */
 #define UP_ALTITUDE     25.0
 #define DOWN_ALTITUDE   10.0
-#define TOP_ALTITUDE    40.0
+#define TOP_ALTITUDE    45.0
 #define LAND_ALTITUDE   1.0
 /*
  * パラシュートの切り離しピン 
@@ -42,7 +42,7 @@
 /*
  * パラシュートの強制切り離し時間 [ms]
  */
-#define CUT_PARA_TIME 300000 
+#define CUT_PARA_TIME 600000 
 
 /*>>>>>>>>>>>>>>>>>>> 各種センサーピン <<<<<<<<<<<<<<<<<<*/
 #define RXPIN_GPS      4 //GPSモジュールのソフトウェアシリアルrxピン
@@ -51,20 +51,23 @@
 #define RXPIN_XBEE     7 //XBEEモジュールのソフトウェアシリアルrxピン
 #define TXPIN_XBEE     2 //XBEEモジュールのソフトウェアシリアルtxピン
 
-#define RBPin          6 //HIGHにすると右モータが後転するピン
-#define RFPin          1 //HIGHにすると右モータが正転するピン
-#define LBPin          5 //HIGHにすると左モータが後転するピン
-#define LFPin          9 //HIGHにすると左モータが正転するピン
+#define RBPin          9 //HIGHにすると右モータが後転するピン
+#define RFPin          5 //HIGHにすると右モータが正転するピン
+#define LBPin          6 //HIGHにすると左モータが後転するピン
+#define LFPin          10 //HIGHにすると左モータが正転するピン
 
 #define LPS331AP_CSPIN      A1 //LPS331AP(気圧センサ)のCSピン
 #define L3GD20_CSPIN        A2 //L3GD20(ジャイロセンサ)のCSピン
 #define SD_CSPIN            A3 //SDカードスロットのCSピン
 #define ADXL345_CSPIN       A4 //ADXL345(加速度センサ)のCSピン
+#define HC_SR04_TRIGPIN      1
+#define HC_SR04_ECHOPIN      0
+#define HC_SR04_CTM         10
 
 /*>>>>>>>>>>>>>>>>>>> 座標関係 <<<<<<<<<<<<<<<<<<*/
-#define GOAL_FLAT          35.515819  //ゴール緯度[deg]
-#define GOAL_FLON          134.171813 //ゴール軽度[deg]
-#define GPS_SAMPLING_RATE  1000       //GPSのサンプリング周期[ms]
+#define GOAL_FLAT          30.375511//ゴール緯度[deg]
+#define GOAL_FLON          130.960250  //ゴール軽度[deg]
+#define GPS_SAMPLING_RATE  2000       //GPSのサンプリング周期[ms]
 #define GOAL_RANGE         1.0        //ゴール判定半径[m]
 
 #define GPS_SAMPLING_NUM   10         //平均取る時のGPSデータの取得数
@@ -78,9 +81,9 @@
 #define VGAIN_I 0.0   //パラメータが角速度の時の積分ｹﾞｲﾝ
 #define VGAIN_D 0.0   //パラメータが角速度の時の微分ゲイン
 
-#define AGAIN_P 12.0  //パラメータが角度の時の比例ｹﾞｲﾝ
-#define AGAIN_I 0.05  //パラメータが角度の時の積分ｹﾞｲﾝ
-#define AGAIN_D 0.5   //パラメータが角度の時の微分ゲイ 
+#define AGAIN_P 8.0  //パラメータが角度の時の比例ｹﾞｲﾝ
+#define AGAIN_I 0.01  //パラメータが角度の時の積分ｹﾞｲﾝ
+#define AGAIN_D 0.0   //パラメータが角度の時の微分ゲイ 
 
 #define MIN_PWM_VALUE 1   //モータに与えるpwmduty比の最小値
 #define MAX_PWM_VALUE 127 //モータに与えるpwmduty比の最大値

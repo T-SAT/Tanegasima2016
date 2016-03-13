@@ -69,7 +69,7 @@ void L3GD20::Init(int CS1, DRBW settingDRBW)
     pinMode(SS, OUTPUT);
     pinMode(10, OUTPUT);
     SPI.begin();
-    digitalWrite(CS1,HIGH);
+    digitalWrite(CS1, HIGH);
     pinMode(CS1, OUTPUT);
     L3GD20_CS = CS1;
 
@@ -85,9 +85,8 @@ void L3GD20::Init(int CS1, DRBW settingDRBW)
 
     while (!Serial) {
     }
-
-    Serial.print("L3GD20 ID(expected 0xD4): ");
-    Serial.println(L3GD20_read(L3GD20_WHOAMI), HEX); // should show D4
+    //Serial.print("L3GD20 ID(expected 0xD4): ");
+    //Serial.println(L3GD20_read(L3GD20_WHOAMI), HEX); // should show D4
 
     L3GD20_write(L3GD20_CTRL1, B00001111 | (byte)(settingDRBW << 4));
     //   |||||||+ X axis enable

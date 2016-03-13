@@ -2,7 +2,7 @@
 
 XBEE::XBEE(uint8_t receivePin, uint8_t transmitPin) : SoftwareSerial(receivePin, transmitPin)
 {
-    SoftwareSerial(receivePin, transmitPin);
+//    SoftwareSerial(receivePin, transmitPin);
 }
 
 void XBEE::TransferData(float data[], int num)

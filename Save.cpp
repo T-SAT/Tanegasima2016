@@ -30,7 +30,7 @@ int Save::OnSD(char *filename, float *data, int num)
         return(-1);
     } else {
         for(i = 0; i < num; i++) {
-            datafile.print(data[i]);
+            datafile.print(data[i], 7);
             datafile.print(",");    
         }
         datafile.print(millis());

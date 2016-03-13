@@ -13,6 +13,10 @@ void Motor::SetPinNum(int motorLF, int motorLB, int motorRF, int motorRB)
   pinMode(MotorLB, OUTPUT);
   pinMode(MotorRF, OUTPUT);
   pinMode(MotorRB, OUTPUT);
+  analogWrite(MotorLF, 0);
+  analogWrite(MotorLB, 0);
+  analogWrite(MotorRF, 0);
+  analogWrite(MotorRB, 0);
 }
 
 void Motor::SetControlLimit(int min, int max)
@@ -25,29 +29,31 @@ void Motor::Control(int motorL, int motorR)
 {
   int motorl, motorr;
 
-  motorl = sign(motorL) * constrain(abs(motorL), MinValue, MaxValue);
-  motorr = sign(motorR) * constrain(abs(motorR), MinValue, MaxValue);
+//  motorl = sign(motorL) * constrain(abs(motorL), MinValue, MaxValue);
+ // motorr = sign(motorR) * constrain(abs(motorR), MinValue, MaxValue);
+  motorl = motorL;
+  motorr = motorR;
 
   if (motorl <= 0 && motorr <= 0) {
-    analogWrite(MotorLF, 0);
+    digitalWrite(MotorLF, LOW);
     analogWrite(MotorLB, abs(motorl));
-    analogWrite(MotorRF, 0);
+    digitalWrite(MotorRF, LOW);
     analogWrite(MotorRB, abs(motorr));
   } else if (motorl <= 0 && motorr >= 0) {
-    analogWrite(MotorLF, 0);
+    digitalWrite(MotorLF, LOW);
     analogWrite(MotorLB, abs(motorl));
     analogWrite(MotorRF, motorr);
-    analogWrite(MotorRB, 0);
+    digitalWrite(MotorRB, LOW);
   } else if (motorl >= 0 && motorr <= 0) {
     analogWrite(MotorLF, motorl);
-    analogWrite(MotorLB, 0);
-    analogWrite(MotorRF, 0);
+    digitalWrite(MotorLB, LOW);
+    digitalWrite(MotorRF, LOW);
     analogWrite(MotorRB, abs(motorr));
   } else if (motorl >= 0 && motorr >= 0) {
     analogWrite(MotorLF, motorl);
-    analogWrite(MotorLB, 0);
+    digitalWrite(MotorLB, LOW);
     analogWrite(MotorRF, motorr);
-    analogWrite(MotorRB, 0);
+    digitalWrite(MotorRB, LOW);
   }
 }
 
@@ -57,7 +63,7 @@ void Motor::SteerControl(float command, float current)
 
   ControlValue = PIDControl(command, current);
   ControlValue = sign(ControlValue)*constrain(fabs(ControlValue), MinValue, MaxValue);
-  Control(127 - ControlValue, 127 + ControlValue);
+  Control(150 - ControlValue, 150 + ControlValue);
 }
 
 void Motor::RunStraight(unsigned long runtime)

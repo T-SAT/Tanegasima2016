@@ -16,6 +16,7 @@ skLPSxxx lps(LPS331AP, LPS331AP_CSPIN);
 void gelay(unsigned long ms)
 {
     unsigned long start = millis();
+
     do {
         while (ss.available())
             gps.encode(ss.read());

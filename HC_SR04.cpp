@@ -5,7 +5,7 @@ HC_SR04 sonic;
 void HC_SR04::Init(int trigpin, int echopin, int ctm) 
 {
     pinMode(trigpin, OUTPUT);
-    pinMode(echopin, OUTPUT);
+    pinMode(echopin, INPUT);
     
     TRIGPIN = trigpin;
     ECHOPIN = echopin; 
